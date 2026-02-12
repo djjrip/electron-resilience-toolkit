@@ -1,102 +1,61 @@
-# ⚡ Electron Resilience Toolkit
+# Electron Resilience Toolkit
 
-**Self-healing automation for Node.js/Electron production environments.**
+Lightweight monitoring toolkit for Node.js/Electron applications.
 
 ## Problem
 
-Standard process managers (PM2, systemd) restart *crashed* processes.  
-They don't prevent *frozen* processes.
+Standard process managers (PM2, systemd) restart *crashed* processes, but don't detect *frozen* ones.
 
-**Scenario:**  
-Your Node.js app hangs (event loop blocked). PID is alive. PM2 does nothing. Users see timeouts.
+**Scenario:** Your Node.js app hangs (event loop blocked). The process is alive, but users see timeouts. PM2 does nothing.
 
 ## Solution
 
-This toolkit monitors **functionality**, not just process existence.
+This toolkit monitors **application functionality**, not just process existence.
 
 ```
-┌─────────────────────────────────────────────┐
-│  Application (Node.js / Electron)           │
-│  ├─ Writes heartbeat every 5s              │
-│  ├─ Monitored heap growth                  │
-│  └─ Auto-snapshot on leak detection        │
-└─────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────┐
-│  External Watchdog                          │
-│  ├─ Checks heartbeat age                   │
-│  ├─ Checks memory threshold                │
-│  └─ Triggers restart + forensics           │
-└─────────────────────────────────────────────┘
+Application Layer
+  ├─ Writes heartbeat file every 5s (proves event loop is running)
+  ├─ Tracks heap growth via V8 API
+  └─ Validates environment before deployment
+
+Watchdog Layer (External Process)
+  ├─ Checks heartbeat file age
+  ├─ Enforces memory thresholds
+  └─ Triggers restart + forensics on failure
 ```
 
-## Real-World Results
+## Real-World Use Case
 
-**GG LOOP Platform (Gaming Telemetry)**
-- **Before:** 3 manual restarts/week, no crash data
-- **After:** 0 manual restarts for 30 days, 99.9% uptime
-- **Scale:** 10,000+ events/day, distributed client fleet
+**GG LOOP Platform** (Gaming Telemetry - Electron + Node.js Backend)
+
+- **Scale:** ~100 active users, ~10k events/day, 1,000 client installations (Windows)
+- **Before:** 3 manual restarts per week, no crash data
+- **After:** 0 manual restarts for 30 days
+- **Key Fix:** Detected IPC listener leak (15k unbounded listeners) via heap snapshots
 
 ## Modules
 
 ### 🛡️ Process Watchdog
-Detects zombie states via heartbeat validation.
+Detects zombie states (event loop blocked, memory exhausted) via external monitoring.
 
-**Before:**
-```
-[03:24 AM] App frozen, users timing out
-[03:27 AM] Manual SSH + kill -9
-```
-
-**After:**
-```
-[03:24 AM] Heartbeat stale (>60s)
-[03:24 AM] Auto-restart triggered
-[03:24 AM] Heap snapshot saved for forensics
-[03:25 AM] App recovered, users unaffected
-```
+**Key Feature:** Application writes heartbeat file every 5s. Watchdog checks file modification time externally. If >60s stale → auto-restart.
 
 ### 📊 Heap Monitor
-Tracks memory growth, auto-snapshots leaks.
+Tracks memory growth, automatically captures heap snapshots when threshold exceeded.
 
-**Before:**
-```
-400MB → 2GB over 6 hours → crash
-```
-
-**After:**
-```
-400MB → 1.5GB (threshold) → snapshot + GC → 450MB stable
-```
+**Usage:** `node --expose-gc watchdog/heap-monitor.js`
 
 ### 🚦 Truth Gate (CI/CD)
-Blocks broken deployments before traffic shift.
+Pre-deployment validation: checks environment schema (Zod), database connectivity, API health before traffic shift.
 
-**Prevents:**
-- Missing environment variables (HTTP 500)
-- Database unreachable (connection timeouts)
-- API dependencies down (cascading failures)
-
-**Before:**
-```
-✅ Build succeeded
-🚀 Deployed to production
-❌ White screen (missing API_KEY)
-```
-
-**After:**
-```
-✅ Build succeeded
-🚦 Truth Gate: env vars ❌
-🚫 Deployment blocked
-```
+**Usage:** `npm run gate` (in CI pipeline)
 
 ## Quick Start
 
 ```bash
 npm install
 
-# Run watchdog
+# Run watchdog (monitors PID)
 node watchdog/process-monitor.js <PID>
 
 # Monitor heap
@@ -104,9 +63,13 @@ node --expose-gc watchdog/heap-monitor.js
 
 # Run truth gate in CI
 npm run gate
+
+# Health check endpoint
+npm run health
+# GET http://localhost:9000/health
 ```
 
-## Integration
+## Integration Example
 
 ```javascript
 // server.js
@@ -122,45 +85,34 @@ setInterval(() => {
 }, 5000);
 ```
 
-See [docs/integration-example.md](docs/integration-example.md) for full Express/PM2/Docker examples.
+See [docs/integration-example.md](docs/integration-example.md) for Express/PM2/Docker patterns.
 
-## Architecture
+## Testing
 
-```
-Application Layer
-  ├─ Heartbeat Writer (validates event loop)
-  ├─ Heap Monitor (detects memory leaks)
-  └─ Truth Gate (pre-deployment validation)
-
-Watchdog Layer (External Process)
-  ├─ Heartbeat Validator
-  ├─ Memory Threshold Enforcer
-  └─ Auto-Restart + Forensics
-
-Forensics Output
-  ├─ Heap Snapshots (.heapsnapshot)
-  ├─ Crash Logs (reason, timestamp, config)
-  └─ Recovery Actions (restart, GC, alert)
+```bash
+npm test
 ```
 
-## Use Cases
-
-| Scenario | Traditional Tools | This Toolkit |
-|----------|------------------|--------------|
-| Process crashed | PM2 restarts | PM2 restarts |
-| Event loop blocked | No detection | Heartbeat detects → restart |
-| Memory leak (slow) | Crashes at OOM | Snapshot at threshold → fix leak |
-| Bad deployment | Ships to prod | Truth gate blocks deploy |
+Basic tests cover:
+- Heartbeat age calculation
+- Memory threshold logic
+- Schema validation
 
 ## Documentation
 
-- [Heap Debugging Guide](docs/heap-debugging.md)
-- [Integration Example](docs/integration-example.md)
-- [GitHub Actions Setup](.github/workflows/truth-gate.yml)
+- [Heap Debugging Guide](docs/heap-debugging.md) - Real GG LOOP debugging case study
+- [Integration Example](docs/integration-example.md) - Express/PM2/Docker setups
+- [GitHub Actions Setup](.github/workflows/truth-gate.yml) - CI/CD example
 
 ## Stack
 
-TypeScript, Node.js, V8 Heap API, PowerShell
+TypeScript, Node.js, V8 Heap API, Winston (structured logging), Zod (schema validation)
+
+## Limitations
+
+- **Designed for:** Small-to-medium scale (100-10k users/events per day)
+- **Not suitable for:** Kubernetes-native workloads (use liveness/readiness probes instead)
+- **Best for:** Standalone Node.js services, Electron desktop apps, early-stage startups
 
 ## License
 

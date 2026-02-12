@@ -11,7 +11,8 @@ const CONFIG = {
     maxMemoryMB: parseInt(process.env.MAX_MEMORY_MB) || 1500,
     maxHeartbeatAge: parseInt(process.env.MAX_HEARTBEAT_AGE_MS) || 60000,
     checkInterval: parseInt(process.env.CHECK_INTERVAL_MS) || 5000,
-    targetPID: parseInt(process.argv[2]) || null
+    targetPID: parseInt(process.argv[2]) || null,
+    maxRestartAttempts: 3
 };
 
 console.log('🛡️ Process Monitor Started');
@@ -64,31 +65,61 @@ function checkMemory(pid) {
     });
 }
 
+let restartAttempts = 0;
+
 function triggerRestart(reason) {
+    if (restartAttempts >= CONFIG.maxRestartAttempts) {
+        console.error(`⛔ Max restart attempts (${CONFIG.maxRestartAttempts}) reached. Giving up.`);
+        process.exit(1);
+    }
+
+    restartAttempts++;
+    const backoffMs = Math.pow(2, restartAttempts) * 1000;
+
     console.log(`⚠️  RESTART TRIGGERED: ${reason}`);
+    console.log(`⚠️  Attempt: ${restartAttempts}/${CONFIG.maxRestartAttempts}`);
+    console.log(`⚠️  Backoff: ${backoffMs}ms`);
     console.log(`⚠️  Timestamp: ${new Date().toISOString()}`);
 
-    // Log to forensics file
     const forensicLog = {
         timestamp: new Date().toISOString(),
         reason,
+        attempt: restartAttempts,
+        backoffMs,
         config: CONFIG
     };
 
     fs.appendFileSync('restart-forensics.log', JSON.stringify(forensicLog) + '\n');
 
-    // Implement your restart logic here
-    // e.g., exec('pm2 restart app')
+    // Implement your restart logic here with exponential backoff
+    // setTimeout(() => exec('pm2 restart app'), backoffMs);
 }
 
 async function healthCheck() {
-    const heartbeat Status = checkHeartbeat();
+    const heartbeatOK = checkHeartbeat();
     const memoryOK = await checkMemory(CONFIG.targetPID);
 
     if (heartbeatOK && memoryOK) {
         console.log('✅ Health check passed');
     }
 }
+
+function cleanup() {
+    console.log('🛑 Shutting down gracefully...');
+    try {
+        if (fs.existsSync(CONFIG.heartbeatFile)) {
+            fs.unlinkSync(CONFIG.heartbeatFile);
+            console.log('✅ Cleaned up heartbeat file');
+        }
+    } catch (e) {
+        console.error('❌ Cleanup failed:', e.message);
+    }
+    process.exit(0);
+}
+
+// Graceful shutdown handlers
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
 
 // Main loop
 setInterval(healthCheck, CONFIG.checkInterval);

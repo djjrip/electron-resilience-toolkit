@@ -1,6 +1,8 @@
 node_modules/
 *.log
-restart-forensics.log
-heartbeat.lock
+heap-snapshots/
 .env
 .DS_Store
+heartbeat.lock
+restart-forensics.log
+coverage/
