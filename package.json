@@ -1,0 +1,39 @@
+{
+    "name": "electron-resilience-toolkit",
+    "version": "1.0.0",
+    "description": "Production-grade self-healing automation for Node.js/Electron runtime stability",
+    "main": "index.js",
+    "scripts": {
+        "watchdog": "node watchdog/process-monitor.js",
+        "gate": "ts-node ci-cd/truth-gate.ts",
+        "test": "echo \"No tests yet\" && exit 0"
+    },
+    "keywords": [
+        "electron",
+        "nodejs",
+        "devops",
+        "sre",
+        "reliability",
+        "monitoring",
+        "watchdog",
+        "ci-cd",
+        "deployment"
+    ],
+    "author": "Jayson Quindao",
+    "license": "MIT",
+    "dependencies": {
+        "zod": "^3.22.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "typescript": "^5.0.0",
+        "ts-node": "^10.9.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/YOUR_USERNAME/electron-resilience-toolkit"
+    }
+}

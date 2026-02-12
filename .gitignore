@@ -1,0 +1,6 @@
+node_modules/
+*.log
+restart-forensics.log
+heartbeat.lock
+.env
+.DS_Store
