@@ -4,6 +4,7 @@
     "description": "Lightweight monitoring toolkit for Node.js/Electron applications",
     "main": "index.js",
     "scripts": {
+        "build": "jest",
         "watchdog": "node watchdog/process-monitor.js",
         "heap": "node --expose-gc watchdog/heap-monitor.js",
         "gate": "ts-node ci-cd/truth-gate.ts",
